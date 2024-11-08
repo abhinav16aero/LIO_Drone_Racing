@@ -18,7 +18,7 @@ def get_model(input_dim=6, output_dim=3):
         input_dim,
         output_dim,
         [64, 64, 64, 64, 128, 128, 128],
-        kernel_size=2,
+        kernel_size=[2,4,8],
         dropout=0.2,
         activation="GELU",
     )
