@@ -261,7 +261,7 @@ def train(args):
         logging.info(f"Continue from epoch {start_epoch}")
     else:
         # default starting from latest checkpoint from interruption
-        latest_pt = os.path.join(args.out_dir, "checkpoints", "inertial_net", "checkpoint_latest.pt")
+        latest_pt = os.path.join(args.out_dir, "checkpoints", "model_net", "checkpoint_latest.pt")
 
         if os.path.isfile(latest_pt):
             checkpoints = torch.load(latest_pt)
