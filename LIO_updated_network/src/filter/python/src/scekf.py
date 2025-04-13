@@ -159,7 +159,7 @@ def get_rotation_from_gravity(acc):
 
 
 class ImuMSCKF:
-    def __init__(self, config=None):
+    def __init__(self, mahalanobis_threshold=7.815, config=None):
 
         # sanity check
         expected_attribute = [
@@ -212,6 +212,8 @@ class ImuMSCKF:
         self.zero_vel_sigma = getattr(config, "zero_vel_sigma", 1e-2)  # m/s
 
         # other tuning parameters
+        self.mahalanobis_threshold = mahalanobis_threshold  # Add this line
+
         self.meascov_scale = getattr(config, "meascov_scale", 1.0)
         self.mahalanobis_factor = getattr(config, "mahalanobis_factor", 1.0)
         if self.mahalanobis_factor <= 0.0:
@@ -399,6 +401,9 @@ class ImuMSCKF:
         N = self.state.N
         # evolving state propagation
         dt_us = t_us - self.state.s_timestamp_us
+        # Bias handling with clipping
+        b_gk = np.clip(b_gk, -0.2, 0.2)  # Prevent excessive bias estimates
+        b_ak = np.clip(b_ak, -0.4, 0.4)
         R_kp1, v_kp1, p_kp1, Akp1 = propagate_rvt_and_jac(
             R_k, v_k, p_k, b_gk, b_ak, gyr, acc, self.g, dt_us * 1e-6
         )
@@ -462,6 +467,11 @@ class ImuMSCKF:
         Sigma_kp1 = propagate_covariance(
             A_aug, B_aug, dt_us * 1e-6, self.Sigma, self.W, self.Q
         )
+        # Ensure covariance symmetry and positive definiteness
+        Sigma_kp1 = 0.5 * (Sigma_kp1 + Sigma_kp1.T)
+        min_eig = np.min(np.real(np.linalg.eigvals(Sigma_kp1)))
+        if min_eig < 1e-8:
+            Sigma_kp1 += (1e-8 - min_eig) * np.eye(Sigma_kp1.shape[0])
 
         # update states and covariance variables
         self.state.s_R = R_kp1
@@ -530,7 +540,7 @@ class ImuMSCKF:
                 [(meas - pred).T, Sinv_temp, meas - pred]
             )
             # threshold from https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm for nu=3, p =99
-            test_failed = normalized_square_error > self.mahalanobis_factor * 11.345
+            test_failed = normalized_square_error > self.mahalanobis_factor * 9.545
             # wait for convergence before failing
             if self.is_mahalanobis_activated() and test_failed:
                 if self.mahalanobis_fail_scale == 0:
@@ -543,6 +553,31 @@ class ImuMSCKF:
                 self.last_success_mahalanobis = self.state.s_timestamp_us
 
         innovation = meas - pred
+
+        # try:
+        #     S = H @ self.Sigma @ H.T + R
+        #     S_inv = np.linalg.inv(S)
+        # except np.linalg.LinAlgError:
+        #     logging.warning("Matrix inversion failed in measurement update")
+        #     return False, None, None, None
+
+        # mahalanobis_sq = innovation.T @ S_inv @ innovation
+        # if mahalanobis_sq > 7.815:
+        #     logging.warning(f"Rejecting update - Mahalanobis distance {mahalanobis_sq:.2f}")
+        #     return False, None, None, None
+
+        # # Covariance inflation for robustness
+        # if mahalanobis_sq > 0.5 * 7.815:
+        #     R *= 2.0  # Double measurement noise for marginal cases
+
+        # # Perform update
+        # K = self.Sigma @ H.T @ S_inv
+        # self.state.s_p += K[:3] @ innovation
+        # self.Sigma = (np.eye(self.Sigma.shape[0]) - K @ H) @ self.Sigma
+        
+        # Post-update covariance stabilization
+        self.Sigma = 0.5 * (self.Sigma + self.Sigma.T)
+        np.fill_diagonal(self.Sigma, np.abs(np.diag(self.Sigma)))
         
         self.meas = meas
         self.pred = pred
@@ -580,7 +615,7 @@ class ImuMSCKF:
         H[:, (9 * clone_idx_0 + 6) : (9 * clone_idx_0 + 9)] = -1.0 * np.eye(3)  # der. wrt p_w0
 
         # noise 
-        R = 0.001 * 0.001 * np.eye(3)
+        R = 0.0001 * 0.0001 * np.eye(3)
 
         return innovation, H, R
 
@@ -596,7 +631,7 @@ class ImuMSCKF:
         H[:, (9 * clone_idx + 6) : (9 * clone_idx + 9)] = np.eye(3)  # der. wrt p_w0
 
         # noise 
-        R = 0.01 * 0.01 * np.eye(3)
+        R = 0.001 * 0.001 * np.eye(3)
 
         return innovation, H, R
 
@@ -679,4 +714,3 @@ def propagate_covariance(A_aug, B_aug, dt, Sigma, W, Q):
     ret[-6:, -6:] += dt * Q
 
     return ret
-

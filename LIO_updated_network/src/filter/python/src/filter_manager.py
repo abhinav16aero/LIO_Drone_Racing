@@ -273,4 +273,3 @@ class FilterManager:
         self.runner.filter.reset_state_and_covariance(
             state.si_Rs, ps, vs, state.s_R, v, p, state.s_ba, state.s_bg
         )
-
