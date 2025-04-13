@@ -402,8 +402,8 @@ class ImuMSCKF:
         # evolving state propagation
         dt_us = t_us - self.state.s_timestamp_us
         # Bias handling with clipping
-        b_gk = np.clip(b_gk, -0.2, 0.2)  # Prevent excessive bias estimates
-        b_ak = np.clip(b_ak, -0.4, 0.4)
+        b_gk = np.clip(b_gk, -0.1, 0.1)  # Prevent excessive bias estimates
+        b_ak = np.clip(b_ak, -0.1, 0.1)
         R_kp1, v_kp1, p_kp1, Akp1 = propagate_rvt_and_jac(
             R_k, v_k, p_k, b_gk, b_ak, gyr, acc, self.g, dt_us * 1e-6
         )

@@ -554,26 +554,26 @@ class ImuMSCKF:
 
         innovation = meas - pred
 
-        # try:
-        #     S = H @ self.Sigma @ H.T + R
-        #     S_inv = np.linalg.inv(S)
-        # except np.linalg.LinAlgError:
-        #     logging.warning("Matrix inversion failed in measurement update")
-        #     return False, None, None, None
+        try:
+            S = H @ self.Sigma @ H.T + R
+            S_inv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            logging.warning("Matrix inversion failed in measurement update")
+            return False, None, None, None
 
-        # mahalanobis_sq = innovation.T @ S_inv @ innovation
-        # if mahalanobis_sq > 7.815:
-        #     logging.warning(f"Rejecting update - Mahalanobis distance {mahalanobis_sq:.2f}")
-        #     return False, None, None, None
+        mahalanobis_sq = innovation.T @ S_inv @ innovation
+        if mahalanobis_sq > 2.815:
+            logging.warning(f"Rejecting update - Mahalanobis distance {mahalanobis_sq:.2f}")
+            return False, None, None, None
 
-        # # Covariance inflation for robustness
-        # if mahalanobis_sq > 0.5 * 7.815:
-        #     R *= 2.0  # Double measurement noise for marginal cases
+        # Covariance inflation for robustness
+        if mahalanobis_sq > 0.5 * 2.815:
+            R *= 2.0  # Double measurement noise for marginal cases
 
-        # # Perform update
-        # K = self.Sigma @ H.T @ S_inv
-        # self.state.s_p += K[:3] @ innovation
-        # self.Sigma = (np.eye(self.Sigma.shape[0]) - K @ H) @ self.Sigma
+        # Perform update
+        K = self.Sigma @ H.T @ S_inv
+        self.state.s_p += K[:3] @ innovation
+        self.Sigma = (np.eye(self.Sigma.shape[0]) - K @ H) @ self.Sigma
         
         # Post-update covariance stabilization
         self.Sigma = 0.5 * (self.Sigma + self.Sigma.T)
